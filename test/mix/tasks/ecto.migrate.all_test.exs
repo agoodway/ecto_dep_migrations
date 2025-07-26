@@ -64,4 +64,42 @@ defmodule Mix.Tasks.Ecto.Migrate.AllTest do
       assert output =~ "could not find Ecto repos"
     end
   end
+
+  describe "timestamp adjustment" do
+    test "extract_timestamp_from_filename extracts correct timestamp" do
+      # Use the private function by calling it via the module
+      # This requires making the function public for testing
+      assert MigrateAll.extract_timestamp_from_filename_test("20230101120000_create_users.exs") == 20230101120000
+      assert MigrateAll.extract_timestamp_from_filename_test("20220515093000_add_settings.exs") == 20220515093000
+      assert MigrateAll.extract_timestamp_from_filename_test("invalid_name.exs") == nil
+      assert MigrateAll.extract_timestamp_from_filename_test("") == nil
+    end
+
+    test "get_latest_app_timestamp handles empty migrations" do
+      assert MigrateAll.get_latest_app_timestamp_test([]) == 20200101000000
+    end
+
+    test "get_latest_app_timestamp finds latest timestamp" do
+      migrations = [
+        {"/path/20230101000000_create_users.exs", 20230101000000},
+        {"/path/20230201000000_add_fields.exs", 20230201000000},
+        {"/path/20220101000000_create_settings.exs", 20220101000000}
+      ]
+      
+      assert MigrateAll.get_latest_app_timestamp_test(migrations) == 20230201000000
+    end
+
+    test "needs_timestamp_adjustment detects problematic timestamps" do
+      dep_migrations = [
+        {"/dep/20220101000000_create_dep_table.exs", 20220101000000},
+        {"/dep/20240101000000_update_dep_table.exs", 20240101000000}
+      ]
+      
+      # Should need adjustment when dep timestamp is older than app timestamp
+      assert MigrateAll.needs_timestamp_adjustment_test(dep_migrations, 20230101000000) == true
+      
+      # Should not need adjustment when all dep timestamps are newer
+      assert MigrateAll.needs_timestamp_adjustment_test(dep_migrations, 20210101000000) == false
+    end
+  end
 end

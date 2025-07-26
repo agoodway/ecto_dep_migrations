@@ -24,3 +24,7 @@ ecto_dep_migrations-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Elixir installation files (should not be committed)
+/bin/
+elixir.zip
