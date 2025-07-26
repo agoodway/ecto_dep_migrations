@@ -109,28 +109,30 @@ defmodule Mix.Tasks.Ecto.Rollback.All do
         Mix.shell().info("Migration paths: #{inspect(final_paths)}")
       end
 
-      # Run rollback
-      result = case Ecto.Migrator.with_repo(repo, fn repo ->
-        Ecto.Migrator.run(repo, final_paths, :down, opts)
-      end) do
-        {:ok, _repo, migrated} ->
-          unless opts[:quiet] do
-            if length(migrated) == 0 do
-              Mix.shell().info("No migrations to rollback for #{inspect(repo)}")
-            else
-              Mix.shell().info("Rolled back #{length(migrated)} migrations")
+      # Run rollback with proper cleanup
+      try do
+        result = case Ecto.Migrator.with_repo(repo, fn repo ->
+          Ecto.Migrator.run(repo, final_paths, :down, opts)
+        end) do
+          {:ok, _repo, migrated} ->
+            unless opts[:quiet] do
+              if length(migrated) == 0 do
+                Mix.shell().info("No migrations to rollback for #{inspect(repo)}")
+              else
+                Mix.shell().info("Rolled back #{length(migrated)} migrations")
+              end
             end
-          end
-          :ok
+            :ok
 
-        {:error, error} ->
-          Mix.raise("Could not rollback migrations: #{inspect(error)}")
+          {:error, error} ->
+            Mix.raise("Could not rollback migrations: #{inspect(error)}")
+        end
+        
+        result
+      after
+        # Always clean up temporary directory, even on errors
+        cleanup_temp_migrations()
       end
-      
-      # Clean up temporary directory if it was created
-      cleanup_temp_migrations()
-      
-      result
     end
   end
 

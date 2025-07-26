@@ -114,28 +114,30 @@ defmodule Mix.Tasks.Ecto.Migrate.All do
         Mix.shell().info("Migration paths: #{inspect(final_paths)}")
       end
 
-      # Run migrations
-      result = case Ecto.Migrator.with_repo(repo, fn repo ->
-        Ecto.Migrator.run(repo, final_paths, :up, opts)
-      end) do
-        {:ok, _repo, migrated} ->
-          unless opts[:quiet] do
-            if length(migrated) == 0 do
-              Mix.shell().info("Repo #{inspect(repo)} is already up")
-            else
-              Mix.shell().info("Migrated #{length(migrated)} migrations")
+      # Run migrations with proper cleanup
+      try do
+        result = case Ecto.Migrator.with_repo(repo, fn repo ->
+          Ecto.Migrator.run(repo, final_paths, :up, opts)
+        end) do
+          {:ok, _repo, migrated} ->
+            unless opts[:quiet] do
+              if length(migrated) == 0 do
+                Mix.shell().info("Repo #{inspect(repo)} is already up")
+              else
+                Mix.shell().info("Migrated #{length(migrated)} migrations")
+              end
             end
-          end
-          :ok
+            :ok
 
-        {:error, error} ->
-          Mix.raise("Could not run migrations: #{inspect(error)}")
+          {:error, error} ->
+            Mix.raise("Could not run migrations: #{inspect(error)}")
+        end
+        
+        result
+      after
+        # Always clean up temporary directory, even on errors
+        cleanup_temp_migrations()
       end
-      
-      # Clean up temporary directory if it was created
-      cleanup_temp_migrations()
-      
-      result
     end
   end
 

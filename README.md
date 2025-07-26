@@ -217,11 +217,33 @@ mix ecto.migrate.all --quiet
    - Your application: `priv/repo/migrations/*.exs`
    - Each dependency: `_build/#{env}/lib/#{dep}/priv/ecto_migrations/*.exs`
 
-2. **Collection Phase**: All migration files are collected and sorted by timestamp
+2. **Timestamp Adjustment Phase**: If dependency migrations have timestamps older than existing application migrations, they are automatically adjusted:
+   - Temporary migration files are created with current timestamps
+   - This ensures dependencies run after existing application migrations
+   - Original dependency files remain unchanged
+   - The adjustment is logged unless `--quiet` is used
 
-3. **Execution Phase**: Migrations are run through `Ecto.Migrator.run/4` with your options
+3. **Collection Phase**: All migration files are collected and sorted by timestamp
 
-4. **Tracking**: Ecto's `schema_migrations` table tracks all migrations normally
+4. **Execution Phase**: Migrations are run through `Ecto.Migrator.run/4` with your options
+
+5. **Cleanup Phase**: Temporary migration files are automatically removed
+
+6. **Tracking**: Ecto's `schema_migrations` table tracks all migrations normally
+
+### Migration Ordering
+
+The package automatically handles migration ordering to prevent issues where dependency migrations with old timestamps would run before newer application migrations. When this situation is detected:
+
+- **Problem**: Dependency provides `20220101000000_create_settings.exs` but your app has `20230201000000_create_users.exs`
+- **Solution**: Dependency migration gets adjusted to run with a current timestamp (e.g., `20250726152000_create_settings.exs`)
+- **Result**: Logical order is maintained - dependencies run after existing application migrations
+
+This happens automatically and transparently. You'll see output like:
+```
+Adjusting dependency migration timestamps to maintain proper order...
+  20220101000000_create_settings.exs -> 20250726152000_create_settings.exs
+```
 
 ## Compatibility
 
@@ -253,6 +275,21 @@ If you get module redefinition errors:
 
 1. Ensure migration modules are uniquely named
 2. Use library-specific prefixes: `MyLib.Migrations.CreateTable`
+
+### Migration Ordering Issues
+
+The package automatically handles most ordering issues, but if you encounter problems:
+
+1. **Check migration timestamps**: Ensure your app migrations have reasonable timestamps
+2. **Review adjustment messages**: Look for "Adjusting dependency migration timestamps" output
+3. **Verify execution order**: Use `--log-migrations-sql` to see the actual execution order
+4. **Manual override**: If needed, you can specify exact migration paths with `--migrations-path`
+
+If timestamp adjustment is not working as expected:
+
+1. Check that dependency migrations are in the correct location (`priv/ecto_migrations/`)
+2. Verify migration file naming follows the pattern: `YYYYMMDDHHMMSS_description.exs`
+3. Ensure your application has at least one existing migration for comparison
 
 ## Contributing
 
