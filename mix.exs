@@ -36,7 +36,8 @@ defmodule EctoDepMigrations.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/yourorg/ecto_dep_migrations"},
-      maintainers: ["Your Name"]
+      maintainers: ["Your Name"],
+      files: ~w(lib priv mix.exs README.md LICENSE CHANGELOG.md usage-rules.md)
     ]
   end
 end

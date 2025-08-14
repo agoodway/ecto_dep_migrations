@@ -25,7 +25,7 @@ Add `ecto_dep_migrations` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ecto_dep_migrations, "~> 0.1.0"}
+    {:ecto_dep_migrations, github: "agoodway/ecto_dep_migrations", depth: 1}
   ]
 end
 ```
@@ -211,11 +211,146 @@ mix ecto.migrate.all -r MyApp.Repo --log-migrations-sql
 mix ecto.migrate.all --quiet
 ```
 
+## Production Releases
+
+When deploying to production where Mix is not available, use the `EctoDepMigrations.Release` module to run migrations:
+
+### Basic Setup
+
+Create a release module in your application:
+
+```elixir
+defmodule MyApp.Release do
+  @app :my_app
+  
+  def migrate do
+    EctoDepMigrations.Release.migrate(@app)
+  end
+  
+  def rollback(version) do
+    EctoDepMigrations.Release.rollback(@app, version)
+  end
+  
+  def migrations_status do
+    EctoDepMigrations.Release.migrations(@app)
+  end
+end
+```
+
+### Using with Elixir Releases
+
+Configure your `rel/env.sh.eex` or runtime commands:
+
+```bash
+# Run migrations on deployment
+./bin/my_app eval "MyApp.Release.migrate()"
+
+# Check migration status
+./bin/my_app eval "MyApp.Release.migrations_status()"
+
+# Rollback to specific version if needed
+./bin/my_app eval "MyApp.Release.rollback(20210101120000)"
+```
+
+### Using with Docker
+
+In your Dockerfile or docker-entrypoint.sh:
+
+```dockerfile
+# Dockerfile
+CMD ["sh", "-c", "./bin/my_app eval 'MyApp.Release.migrate()' && ./bin/my_app start"]
+```
+
+Or with a separate migration step:
+
+```yaml
+# docker-compose.yml
+services:
+  migrate:
+    image: my_app:latest
+    command: ./bin/my_app eval "MyApp.Release.migrate()"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+  
+  app:
+    image: my_app:latest
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ./bin/my_app start
+```
+
+### Advanced Options
+
+The release module supports several options:
+
+```elixir
+# Migrate specific repositories
+EctoDepMigrations.Release.migrate(:my_app, repos: [MyApp.Repo, MyApp.ReadOnlyRepo])
+
+# Run migrations quietly (no output)
+EctoDepMigrations.Release.migrate(:my_app, quiet: true)
+
+# Rollback specific repo
+EctoDepMigrations.Release.rollback(:my_app, 20210101120000, repo: MyApp.Repo)
+
+# Check status for specific repos
+EctoDepMigrations.Release.migrations(:my_app, repos: [MyApp.Repo])
+```
+
+### Kubernetes Jobs
+
+For Kubernetes deployments, use a Job or initContainer:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-database
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: migrate
+        image: my-app:latest
+        command: ["./bin/my_app", "eval", "MyApp.Release.migrate()"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: url
+```
+
+### Error Handling
+
+The release module will raise exceptions on errors. Wrap calls for custom handling:
+
+```elixir
+defmodule MyApp.Release do
+  require Logger
+  
+  def migrate do
+    try do
+      EctoDepMigrations.Release.migrate(:my_app)
+      Logger.info("Migrations completed successfully")
+      :ok
+    rescue
+      e ->
+        Logger.error("Migration failed: #{inspect(e)}")
+        {:error, e}
+    end
+  end
+end
+```
+
 ## How It Works
 
 1. **Discovery Phase**: The tasks scan for migrations in:
    - Your application: `priv/repo/migrations/*.exs`
-   - Each dependency: `_build/#{env}/lib/#{dep}/priv/ecto_migrations/*.exs`
+   - Each dependency: `_build/#{env}/lib/#{dep}/priv/ecto_migrations/*.exs` (Mix)
+   - Each dependency: `priv/ecto_migrations/*.exs` (Release mode)
 
 2. **Collection Phase**: All migration files are collected and sorted by timestamp
 
